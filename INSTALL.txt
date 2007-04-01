@@ -1,0 +1,59 @@
+<!-- distributed with AuthDrupal v 0.3.2, 2007-0725 -->
+
+If you are reading this in an INSTALL.txt file, then these instructions are for
+the version of the files you have.
+
+The latest version of these instructions and of the code can be found at
+[http://www.mediawiki.org/w/index.php?title=Extension:AuthDrupal].
+
+* Check whether PHP on your server supports mcrypt. Look at the output of
+  phpinfo(); you should find "--with-mcrypt" and/or an mcrypt section. If you
+  don't find it, see section below on mcrypt.
+
+** On recent Ubuntu releases installing mcrypt is as easy as:
+   sudo apt-get install php5-mcrypt
+
+* download the AuthDrupal files and save or unpack them into
+  wiki/extensions/AuthDrupal/
+
+* edit the key string in crypto.php to be something unique to your site
+  (look for $key = )
+
+* put Mediawiki.module, Mediawiki.info, and a copy of crypto.php into
+  drupal/modules (yes, you want crypto.php in both places). Edit the settings
+  at the top of Mediawiki.module to be the same as the cookie domain in
+  LocalSettings.php.
+
+* edit the end of your wiki/LocalSettings.php file to include the code in
+  AddToLocalSettings.php. Change the database settings to match your setup.
+  Change the cookie domain name  to the domain under which your Drupal and wiki
+  are hosted.  If drupal and mediawiki use the same database, just set
+  $wgAuthDrupal_UseExtDatabase = false and ignore most of the  _MySQL_ settings.
+
+* To get rid of the "You must log in to edit pages" notice when a non-logged-in
+  user clicks the Edit tab, do the following:
+
+  ** Go to the article called "MediaWiki:Whitelistedittext".
+  ** The edit box should be preloaded with this text: "You have to $1 to edit
+     pages."
+  ** Change this to the following (replace the url with whatever you've set for
+     $wgAuthDrupal_LoginURL):
+
+     You have to <span class="plainlinks">[http://mydomain.com log in]</span> to edit pages.
+
+* go into Drupal admin pages and enable the Mediawiki module
+
+Things should work at this point. If behavior is funny at first, delete the
+cookies for your domain, and try it again with a fresh start.
+
+Optional parts:
+
+* you may want to ensure that account creation is blocked. Try going to
+  /wiki/index.php?title=Special:Userlogin&type=signup
+  (TODO: document how to turn off account creation)
+
+* even though the extension can change the login/logout link to point to Drupal,
+  that does not stop a savvy user from going to Special:Userlogin directly. You
+  may want to edit .htaccess to redirect that URL. There are instructions for
+  this at the bottom of this page:
+  [http://wiki.case.edu/CaseWiki:External_Authentication]

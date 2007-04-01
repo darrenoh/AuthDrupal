@@ -1,0 +1,5 @@
+; $Id: $
+name = AuthDrupal
+description = Provides Drupal to Mediawiki login integration.
+package = mediawiki
+version = 0.3.2

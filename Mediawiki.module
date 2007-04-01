@@ -1,0 +1,112 @@
+<?php
+// Written by Mitch Schwenk <tazzytazzy at yahoo (.) com
+// Updates by Maarten van Dantzich mediawiki.org User:Thinkling
+//
+//  v 0.3.2 - 2007-0725
+
+//----------------------------------------------------------------------
+//
+// EDIT THESE SETTINGS to match your install
+//
+//----------------------------------------------------------------------
+
+$GLOBALS['wgCookieDomain']      = ''; // should match $wgCookieDomain
+
+$GLOBALS['wgDBname']            = 'wikidb';       // should match what's set in wiki/LocalSettings.php
+$GLOBALS['wgDBprefix']          = '';  // should match what's set in wiki/LocalSettings.php
+
+// **IF** you set this in wiki/LocalSettings, set it to the same thing here; if
+// if don't see it in wiki/LocalSettings.php, leave it alone.
+$GLOBALS['wgCookiePath']        = '/';
+
+//----------------------------------------------------------------------
+//
+// DO NOT EDIT BELOW HERE
+//
+//----------------------------------------------------------------------
+
+// this lifted from wiki/include/DefaultSettings.php
+$wgProto = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] == 'on') ? 'https' : 'http';
+$GLOBALS['wgCookieSecure'] = ($wgProto == 'https');
+
+
+
+// XXX This is virtually the same code as StaticUserLogout in AuthDrupal.php
+// XXX and should probably move into a utility include file and be shared
+function mediawiki_StaticUserLogout(){
+        // $this->clearInstanceCache( 'defaults' );
+
+        {
+                // this lifted from wiki/includes/Setup.php which hasn't been included yet at this point
+                if ( $GLOBALS['wgDBprefix'] ) {
+                        $GLOBALS['wgCookiePrefix'] = $GLOBALS['wgDBname'] . '_' . $GLOBALS['wgDBprefix'];
+                } elseif ( $GLOBALS['wgSharedDB'] ) {
+                        // This is not supported yet--haven't researched it--Maarten.
+                        // XXX should throw an error into watchdog log?
+                        $GLOBALS['wgCookiePrefix'] = $GLOBALS['wgSharedDB'];
+                } else {
+                        $GLOBALS['wgCookiePrefix'] = $GLOBALS['wgDBname'];
+                }
+        }
+
+        // $_SESSION['wsUserID'] = 0;  let's unset the cookie instead
+        setcookie( $GLOBALS['wgCookiePrefix'].'_session', '', time() - 3600, $GLOBALS['wgCookiePath'], $GLOBALS['wgCookieDomain'], $GLOBALS['wgCookieSecure'] );
+
+        setcookie( $GLOBALS['wgCookiePrefix'].'UserName', '', time() - 3600, $GLOBALS['wgCookiePath'], $GLOBALS['wgCookieDomain'], $GLOBALS['wgCookieSecure'] );
+        setcookie( $GLOBALS['wgCookiePrefix'].'UserID',   '', time() - 3600, $GLOBALS['wgCookiePath'], $GLOBALS['wgCookieDomain'], $GLOBALS['wgCookieSecure'] );
+        setcookie( $GLOBALS['wgCookiePrefix'].'Token',    '', time() - 3600, $GLOBALS['wgCookiePath'], $GLOBALS['wgCookieDomain'], $GLOBALS['wgCookieSecure'] );
+
+        # Remember when user logged out, to prevent seeing cached pages
+        $ts_now = gmdate( 'YmdHis', time() ); // emulates wfTimestampNow()
+        setcookie( $GLOBALS['wgCookiePrefix'].'LoggedOut', $ts_now, time() + 86400, $GLOBALS['wgCookiePath'], $GLOBALS['wgCookieDomain'], $GLOBALS['wgCookieSecure'] );
+}
+
+/**
+ * Valid permissions for this module
+ * @return array An array of valid permissions for the onthisdate module
+ */
+function mediawiki_perm() {
+  return array('access content');
+} // function onthisdate_perm()
+
+function mediawiki_user($op, &$edit, &$user, $category = NULL) {
+
+  switch ($op) {
+    case 'login':
+                # create seperate session id so mediawiki can see the user!
+                $exp = time() + 2592000; // one month in seconds
+                $data =  $user->name . ":" . $_SERVER["REMOTE_ADDR"];
+                $data = mediawiki_encode($data);
+                setcookie('DRXtrArgs', $data, $exp,  $GLOBALS['wgCookiePath'], $GLOBALS['wgCookieDomain'] );
+
+                // remove the loggedout cookie--not sure this is necessary; MW itself does not
+                // seem to do it when a user logs back in thru MW
+                setcookie( $GLOBALS['wgCookiePrefix'].'LoggedOut', '', time() - 3600,  $GLOBALS['wgCookiePath'], $GLOBALS['wgCookieDomain'], $GLOBALS['wgCookieSecure'] );
+
+      break;
+
+    case 'logout':
+                setcookie("DRXtrArgs", "", time() - 3600, $GLOBALS['wgCookiePath'], $GLOBALS['wgCookieDomain']);
+                mediawiki_StaticUserLogout();
+      break;
+
+  }
+}
+
+        /**
+         * Encode a string
+         * @param string $data String of text to be encoded
+         * @return string Encoded data
+         */
+        function mediawiki_encode($data){
+                // we need to generate a key!
+#                $key1 = $_SERVER["REMOTE_ADDR"]; //rotating keys - per client
+
+                require_once('crypto.php'); // require the phpFreaksCrypto class
+
+                $crypto = new phpFreaksCrypto();
+                $encrypted_data = $crypto->encrypt($data);
+// explicit call causes warnings -- Maarten                $crypto->__destruct();
+                return $encrypted_data;
+        }
+?>
