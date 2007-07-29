@@ -4,6 +4,9 @@
 /**
  * AuthDrupal.php
  *
+ * v 0.4 - 2007-0729
+ *   - trivial update to match changes to Mediawiki.module
+ *
  * v 0.3.2  - 2007-0727 (contrib from michaeljoseph AT gmail DOT com)
  *  - formatted code and standardised phpdoc comment style
  *  - tested with Drupal 5.1
@@ -106,8 +109,10 @@ function SetupAuthDrupal() {
  * XXX NOTE this code is replicated in Mediawiki.module so if you edit it here,
  * see if you need to fix it there too. (Should really be shared.)
  */
+
 function StaticUserLogout() {
-	// this lifted from wiki/includes/Setup.php which hasn't been included yet at this point
+	// this lifted from wiki/includes/Setup.php which hasn't been included
+	// when we need these
 	if ( $GLOBALS['wgDBprefix'] ) {
 		$GLOBALS['wgCookiePrefix'] = $GLOBALS['wgDBname'] . '_' . $GLOBALS['wgDBprefix'];
 	}

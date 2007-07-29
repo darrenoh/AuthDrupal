@@ -1,4 +1,4 @@
-<!-- distributed with AuthDrupal v 0.3.2, 2007-0725 -->
+<!-- distributed with AuthDrupal v 0.4, 2007-0729 -->
 
 If you are reading this in an INSTALL.txt file, then these instructions are for
 the version of the files you have.
@@ -20,15 +20,18 @@ The latest version of these instructions and of the code can be found at
   (look for $key = )
 
 * put Mediawiki.module, Mediawiki.info, and a copy of crypto.php into
-  drupal/modules (yes, you want crypto.php in both places). Edit the settings
-  at the top of Mediawiki.module to be the same as the cookie domain in
-  LocalSettings.php.
+  drupal/modules (yes, you want crypto.php in both places).
 
-* edit the end of your wiki/LocalSettings.php file to include the code in
-  AddToLocalSettings.php. Change the database settings to match your setup.
+* Add code in AddToLocalSettings.php to the end of your wiki/LocalSettings.php
+  file. Change the database settings to match your setup.
   Change the cookie domain name  to the domain under which your Drupal and wiki
   are hosted.  If drupal and mediawiki use the same database, just set
   $wgAuthDrupal_UseExtDatabase = false and ignore most of the  _MySQL_ settings.
+
+* Edit the settings at the top of Mediawiki.module so that each item matches
+  what you have set in LocalSettings.php. If you have multiple wikis sharing
+  the same Drupal login, create a block of settings for each wiki. If you only
+  have one wiki, delete the second example settings.
 
 * To get rid of the "You must log in to edit pages" notice when a non-logged-in
   user clicks the Edit tab, do the following:
