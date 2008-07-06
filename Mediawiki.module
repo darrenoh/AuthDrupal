@@ -2,6 +2,12 @@
 // Written by Mitch Schwenk <tazzytazzy at yahoo (.) com
 // Updates by Maarten van Dantzich mediawiki.org User:Thinkling
 //
+//  v 0.6 - 2008-06
+//    removed hook_perms as it wasn't relevant
+//    replaced mcrypt with less secure but more portable approach to 
+//      communicating & verifying the username
+//  v 0.5 - 2007-09
+//    no updates to this file
 //  v 0.4 - 2007-0729
 //     Maarten-added support for multiple wikis by putting settings into array
 //  v 0.3.2 - 2007-0725
@@ -12,6 +18,14 @@
  *
  *----------------------------------------------------------------------*/
 
+/*
+ * Replace this key string with something non-trivial to prevent
+ * user login spoofing. Make it hardto guess, as if it is a password.
+ * 
+ * YOU MUST CHANGE THIS to something unique to your site. 
+ */
+$GLOBALS['wgAuthDrupal_security_key'] = 'ReplaceThisString';
+
 /* For each wiki that shares the Drupal login front end, create a set
  * of settings here that matches what you have in LocalSettings.php for
  * the same variable FOR THAT WIKI.
@@ -20,7 +34,7 @@ $GLOBALS['wgAuthDrupal_wiki_settings'] = array (
 
 		// settings for wiki 1  (i.e. copy values from wiki1/LocalSettings.php)
 		array(
-			'wgCookieDomain' 	=> '.trailheadrevolution.com',
+			'wgCookieDomain' 	=> '.yourdomain.com',
 			'wgDBname' 			=> 'wiki',
 			'wgDBprefix' 		=> 'wiki_',
 
@@ -30,15 +44,16 @@ $GLOBALS['wgAuthDrupal_wiki_settings'] = array (
 			'wgCookiePath' 		=> '/'
 		)
 
+/***
 		// settings for wiki 2  (i.e. copy values from wiki2/LocalSettings.php)
 		// DELETE if you only have 1 wiki.
 		, array(
-			'wgCookieDomain' 	=> 'test.trailheadrevolution.com',
-			'wgDBname' 			=> 'wiki',
+			'wgCookieDomain' 	=> '.yourotherdomain.com',
+			'wgDBname' 			=> 'wiki2',
 			'wgDBprefix' 		=> 'wiki_',
 			'wgCookiePath' 		=> '/'
 		)
-
+***/
 		// NOTE: to add wikis, copy #2 and modify to suit
 
 	);
@@ -97,26 +112,21 @@ function mediawiki_StaticUserLogout() {
 	}
 }
 
-/**
- * Valid permissions for this module
- * @return array An array of valid permissions for the onthisdate module
- */
-function mediawiki_perm() {
-  return array('access content');
-} // function onthisdate_perm()
+
 
 function mediawiki_user($op, &$edit, &$user, $category = NULL) {
-
+  require_once('AuthDrupalEncode.php');
+	 
   switch ($op) {
     case 'login':
 		// create seperate session id so mediawiki can see the user!
 		$exp = time() + 2592000; // one month in seconds
-		$data =  $user->name . ":" . $_SERVER["REMOTE_ADDR"];
-		$data = mediawiki_encode($data);
+		$encoded_name = authdrupal_encode($user->name); 
 		foreach( $GLOBALS['wgAuthDrupal_wiki_settings'] as $vals) {
 			// set the cookie that communicates the username
-			setcookie('DRXtrArgs', $data, $exp,  $vals['wgCookiePath'], $vals['wgCookieDomain'] );
-
+			setcookie('DRXtrArgs', $user->name, $exp,  $vals['wgCookiePath'], $vals['wgCookieDomain'] );
+			setcookie('DRXtrArgs2', $encoded_name, $exp,  $vals['wgCookiePath'], $vals['wgCookieDomain'] );
+			
 			// remove the loggedout cookie--not sure this is necessary; MW itself does not
 			// seem to do it when a user logs back in thru MW
 			setcookie( $vals['wgCookiePrefix'].'LoggedOut', '', time() - 3600,  $vals['wgCookiePath'], $vals['wgCookieDomain'], $GLOBALS['wgCookieSecure'] );
@@ -127,6 +137,7 @@ function mediawiki_user($op, &$edit, &$user, $category = NULL) {
 		foreach( $GLOBALS['wgAuthDrupal_wiki_settings'] as $vals) {
 			// delete the cookie that communicates the username
 			setcookie("DRXtrArgs", "", time() - 3600, $vals['wgCookiePath'], $vals['wgCookieDomain']);
+			setcookie("DRXtrArgs2", "", time() - 3600, $vals['wgCookiePath'], $vals['wgCookieDomain']);
 		}
 		mediawiki_StaticUserLogout();
       break;
@@ -134,16 +145,4 @@ function mediawiki_user($op, &$edit, &$user, $category = NULL) {
   }
 }
 
-        /**
-         * Encode a string
-         * @param string $data String of text to be encoded
-         * @return string Encoded data
-         */
-        function mediawiki_encode($data){
-                require_once('crypto.php'); // require the phpFreaksCrypto class
-
-                $crypto = new phpFreaksCrypto();
-                $encrypted_data = $crypto->encrypt($data);
-                return $encrypted_data;
-        }
 ?>

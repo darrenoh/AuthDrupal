@@ -1,4 +1,4 @@
-<!-- distributed with AuthDrupal v 0.4, 2007-0729 -->
+<!-- distributed with AuthDrupal v 0.6, 2008-0620 -->
 
 If you are reading this in an INSTALL.txt file, then these instructions are for
 the version of the files you have.
@@ -6,29 +6,25 @@ the version of the files you have.
 The latest version of these instructions and of the code can be found at
 [http://www.mediawiki.org/w/index.php?title=Extension:AuthDrupal].
 
-* Check whether PHP on your server supports mcrypt. Look at the output of
-  phpinfo(); you should find "--with-mcrypt" and/or an mcrypt section. If you
-  don't find it, see section below on mcrypt.
-
-** On recent Ubuntu releases installing mcrypt is as easy as:
-   sudo apt-get install php5-mcrypt
-
 * download the AuthDrupal files and save or unpack them into
   wiki/extensions/AuthDrupal/
 
-* edit the key string in crypto.php to be something unique to your site
-  (look for $key = )
-
-* put Mediawiki.module, Mediawiki.info, and a copy of crypto.php into
-  drupal/modules (yes, you want crypto.php in both places).
+* put Mediawiki.module, Mediawiki.info, and a copy of AuthDrupalEncode.php into
+  drupal/modules (yes, you want AuthDrupalEncode.php in both places).
 
 * Add code in AddToLocalSettings.php to the end of your wiki/LocalSettings.php
   file. Change the database settings to match your setup.
+  
   Change the cookie domain name  to the domain under which your Drupal and wiki
   are hosted.  If drupal and mediawiki use the same database, just set
   $wgAuthDrupal_UseExtDatabase = false and ignore most of the  _MySQL_ settings.
 
-* Edit the settings at the top of Mediawiki.module so that each item matches
+* You need to assign a key to use to encode the username to prevent spoofing.
+  Make up a key string (something unique, think of it as a password) and set
+  the same value for wgAuthDrupal_security_key in both LocalSettings.php
+  and Mediawiki.module.
+  
+* Edit the other settings at the top of Mediawiki.module so that each item matches
   what you have set in LocalSettings.php. If you have multiple wikis sharing
   the same Drupal login, create a block of settings for each wiki. If you only
   have one wiki, delete the second example settings.

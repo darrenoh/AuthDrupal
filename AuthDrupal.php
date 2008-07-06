@@ -4,6 +4,29 @@
 /**
  * AuthDrupal.php
  *
+ * v 0.6 - 2008-06
+ *   - removed use of mcrypt/crypto.php and replaced with weaker home-grown
+ *     username encoding.
+ * 
+ *   - made support for user roles optional, turned off by default, and now 
+ *     allows only some roles to be propagated. (This is not well tested.)
+ *     
+ * 
+ * v 0.5 - 2007-09
+ *   - corrected return values from hook functions as suggested by anisotropic
+ *     http://drupal.org/node/177258#comment-273705
+ *
+ *   - added support for pulling user roles from Drupal and setting them as
+ *     group membership on the MW user object.
+ *     updateUser() is now called for existing session as well as new session
+ *     to ensure user roles are pulled fresh from Drupal.
+ *
+ *     additions to LocalSettings.php:
+ *     - $wgAuthDrupal_RolesTable
+ *     - $wgAuthDrupal_UsersRolesTable
+ *
+ *     replaced some references to $wgAuth inside methods with $this
+ *
  * v 0.4 - 2007-0729
  *   - trivial update to match changes to Mediawiki.module
  *
@@ -161,20 +184,25 @@ function Auth_drupal_autologin_hook(& $return_user ) {
 	if ($rc && $tmpuser->isLoggedIn()) {
 		if ( $wgAuth->authenticate( $tmpuser->getName(), '' ) ) {
 			//!dbg wfDebug("AuthDrupal: User " . $tmpuser->getName() . " already logged in\n");
-			return;
+
+			// update email, real name, etc.
+			$wgAuth->updateUser( $tmpuser );
+
+			return true;
+
 		} else {
 			// log out the existing user and continue below to start over
 			$tmpuser->logout();
+
+			// no return here--fall through to code below
 		}
 	}
 
 	// Now lets check for drupal cookie
-	$name = ""; // Lets be safe - anti- brute force attacks
-
 	$name = getCurrentDrupalUsername();
 
 	if ( empty( $name ) ) {
-		return;
+		return false;
 	}
 
 	$user = User::newFromName( $name );
@@ -186,7 +214,7 @@ function Auth_drupal_autologin_hook(& $return_user ) {
 
 		if ( empty( $drupal_user ) ) {
 			wfDebug( __FUNCTION__ . " AuthDrupal ERROR: " . $name . " not found in Drupal DB \n" );
-			return;
+			return false;
 		}
 
 		//!dbg wfDebug( "AuthDrupal: logging in NEW user " . $name . "\n" );
@@ -220,6 +248,7 @@ function Auth_drupal_autologin_hook(& $return_user ) {
 	$wgAuth->logit( $message );
 
 	$return_user = $user;
+	return true;
 }
 
 /**
@@ -261,6 +290,7 @@ function Auth_drupal_loginlink_hook( & $personal_urls, & $title ) {
 			"You have to <a href='" . $GLOBALS['wgAuthDrupal_LoginURL']
 			. "'>log in</a> to edit pages"
 	 */
+	 return true;
 }
 
 /**
@@ -274,6 +304,7 @@ function Auth_drupal_logoutlink_hook(& $personal_urls, & $title) {
 		'text' => wfMsg('userlogout' ),
 		'href' => $GLOBALS['wgAuthDrupal_LogoutURL'] );
 
+	return true;
 }
 
 /**
@@ -302,6 +333,8 @@ class AuthDrupal extends AuthPlugin {
 	function AuthDrupal() {
 		global $wgAuthDrupal_TablePrefix;
 		global $wgAuthDrupal_UserTable;
+		global $wgAuthDrupal_RolesTable;
+		global $wgAuthDrupal_UsersRolesTable;
 		global $wgAuthDrupal_LogMessages;
 		global $wgAuthDrupal_UID;
 
@@ -318,7 +351,10 @@ class AuthDrupal extends AuthPlugin {
 		// $this->drupal_users_table = "`" . $this->db_prefix . $this->db_table . "`";
 		// $this->drupal_log_table = "`" . $this->db_prefix . "watchdog`";
 		$this->drupal_users_table = $this->makeDrupalTableName( $wgAuthDrupal_UserTable );
+		$this->drupal_roles_table = $this->makeDrupalTableName( $wgAuthDrupal_RolesTable );
+		$this->drupal_users_roles_table = $this->makeDrupalTableName( $wgAuthDrupal_UsersRolesTable );
 		$this->drupal_log_table = $this->makeDrupalTableName( "watchdog" );
+
 		return;
 	}
 
@@ -368,6 +404,35 @@ class AuthDrupal extends AuthPlugin {
 								"*",
 								"LCase(name)=LCase(CONVERT($qUsername USING latin1))",
 								"AuthDrupal::getDrupalUser" );
+	}
+
+	function getDrupalUserRoles($drupal_user) {
+	    $roles = array();
+
+	    // this role is implicit in Drupal for logged-in users
+	    $roles[] = 'authenticated user';
+
+		$q = "SELECT r.rid, r.name FROM " . $this->drupal_roles_table . " r "
+			. " INNER JOIN " . $this->drupal_users_roles_table . " ur "
+			. " ON ur.rid = r.rid WHERE ur.uid = " . $drupal_user->uid;
+
+		$dbr = & $this->getDB();
+		$res = $dbr->query($q, __METHOD__);
+
+		if ( $res !== false ) {
+			if ( !$dbr->numRows($res) ) {
+				$dbr->freeResult($res);
+			}
+			else {
+				$rows = array();
+				while ( $row = $dbr->fetchRow( $res ) ) {
+					$roles[] = $row['name'];
+				}
+				$dbr->freeResult( $res );
+			}
+		}
+
+	    return $roles;
 	}
 
 	/**
@@ -491,12 +556,10 @@ class AuthDrupal extends AuthPlugin {
 	 * @public
 	 */
 	function updateUser(& $user) {
-		//!dbg wfDebug("##" . __METHOD__ . "\n");
-
-		global $wgAuth;
+		// wfDebug("##" . __METHOD__ . "\n"); //!dbg
 
 		$name = $user->getName();
-		$drupal_user = $wgAuth->getDrupalUser($name);
+		$drupal_user = $this->getDrupalUser($name);
 
 		if ( empty( $drupal_user ) ) {
 			wfDebug( __FUNCTION__ . " AuthDrupal ERROR: " . $name . " not found in Drupal DB \n" );
@@ -504,6 +567,25 @@ class AuthDrupal extends AuthPlugin {
 		}
 
 		$user->load();
+
+		if ( !empty( $wgAuthDrupal_PropagateRoles ) ) {
+			// we load the user's Drupal roles into the MW groups array transiently.
+			// Using $user->AddGroup() would save them into the MW database, and then
+			// we'd have to worry about updating roles that have been removed.
+			$d_roles = $this->getDrupalUserRoles($drupal_user);
+			
+			// if requested, filter which roles are propagated
+			if ( !empty( $wgAuthDrupal_Roles ) ) {
+				$d_roles = array_intersect( $d_roles, $wgAuthDrupal_Roles );
+			}
+			$user->mGroups = array_merge($user->mGroups, $d_roles);
+
+			$user->getEffectiveGroups(true); // force update
+			$user->mRights = null; // force rights update
+
+			// wfDebug("## AuthDrupal Effective Groups after merge: " . array_to_str($user->getEffectiveGroups(true)) . "\n");
+			// wfDebug("## AuthDrupal Effective Rights after merge: " . array_to_str($user->getRights()) . "\n");
+		}
 
 		/* XXX replication of Drupal passwords in MW database disabled for now;
 		   XXX wasn't actually working & I don't need it --Maarten
@@ -747,33 +829,22 @@ function auth_drupal_db_error_callback($db_obj, $error) {
 /**
  * Utility functions for decoding cookie with username
  *
- * Written on 2006/01/06 by Mitch Schwenk <tazzytazzy2 (at) yahoo (dot) com>
+ * Does a check against an obfuscated version to verify that the username
+ * was actually set by our code on the Drupal side, and not being spoofed 
+ * by a malicious end user.
+ * 
  */
 function getCurrentDrupalUsername() {
-	$drupargs = $_COOKIE["DRXtrArgs"];
-
-	list ($DRuser, $DRhost) = split(":", rawurldecode( auth_decode( $drupargs ) ), 2);
-
-	//!mvd removed IP address check here; we want the login session to
-	//   survive a change of IP address (e.g. going to another wifi network, or
-	//   AOL users whose IP addr can change from request to request)
-	//    if ( ($DRuser != 0 || $DRuser != "") && $_SERVER["REMOTE_ADDR"] == $DRhost) {
-	if ( ! empty( $DRuser) ) {
-		return $DRuser;
-	} else {
-		return "";
+    require_once('AuthDrupalEncode.php');
+	
+    $plaintext_name = $_COOKIE["DRXtrArgs"];
+	$encoded_name = $_COOKIE["DRXtrArgs2"];
+	
+	if ( authdrupal_encode( $plaintext_name ) == $encoded_name ) {
+		return $plaintext_name;
 	}
-}
-
-/**
- * Unencrypt the cookie data
- */
-function auth_decode($encrypted_data) {
-	require_once ( 'crypto.php' ); // require the phpFreaksCrypto class
-
-	$crypto = new phpFreaksCrypto();
-	$data = $crypto->decrypt( $encrypted_data );
-
-	return $data;
+	else {
+		return null;	
+	}
 }
 ?>

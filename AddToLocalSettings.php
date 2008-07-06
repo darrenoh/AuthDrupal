@@ -1,12 +1,20 @@
 ######################################################################
 # User authentication via Drupal using AuthDrupal
-# AuthDrupal v 0.3.2, 2007-0725
+# AuthDrupal v 0.6, 2008-0620
 
 // disable registration and sign-in from the wiki front page
 $wgGroupPermissions['*']['edit'] = false; // MediaWiki 1.5+ Settings
 $wgGroupPermissions['*']['createaccount'] = false; // MediaWiki 1.5+ Settings
 
 $wgCookieDomain = '.yourdomain.com';
+
+//
+// Replace this key string with something non-trivial to prevent
+// user login spoofing. Make it hardto guess, as if it is a password.
+// 
+// YOU MUST CHANGE THIS to something unique to your site and it must
+// match this setting in Mediawiki.module
+$wgAuthDrupal_security_key = 'ReplaceThisString';
 
 // is Drupal in a different database than Mediawiki?
 $wgAuthDrupal_UseExtDatabase = true;
@@ -19,6 +27,8 @@ $wgAuthDrupal_MySQL_Database = 'drpl';           // Drupal MySQL Database Name.
 
 $wgAuthDrupal_TablePrefix      = "";
 $wgAuthDrupal_UserTable     = 'users';        // name of drupal user table without prefix; normally 'users'
+$wgAuthDrupal_RolesTable     	= 'role';       // Name of your Drupal user table. (normally 'role')
+$wgAuthDrupal_UsersRolesTable	= 'users_roles'; // Name of your Drupal user table. (normally 'users_roles')
 
 
 // $wgAuthDrupal_GetRealNames :
@@ -27,6 +37,15 @@ $wgAuthDrupal_UserTable     = 'users';        // name of drupal user table witho
 // profile_last_name, the Auth Module can copy the names into the user's
 // wiki profile
 $wgAuthDrupal_GetRealNames = false;
+
+// $wgAuthDrupal_PropagateRoles :
+// Set this to true if you want Drupal user roles to be turned into Mediawiki
+// group membership. If you want ALL roles to be turned into groups, leave
+// $wgAuthDrupal_Roles empty. You can limit the roles that should be propagated 
+// by setting $wgAuthDrupal_Roles to an array containing names of roles to be
+// propagated, like $wgAuthDrupal_Roles = array( 'staff', 'member' );
+$wgAuthDrupal_PropagateRoles = false;
+$wgAuthDrupal_Roles = null;  // null means propagate all roles
 
 // You probably do not need to change these
 // $wgAuthDrupal_RealNames_fields_table; // set if different than 'profile_fields'
