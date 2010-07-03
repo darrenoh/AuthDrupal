@@ -1,6 +1,6 @@
 ######################################################################
 # User authentication via Drupal using AuthDrupal
-# AuthDrupal v 0.6, 2008-0620
+# AuthDrupal v 0.7, 2010-03-01
 
 // disable registration and sign-in from the wiki front page
 $wgGroupPermissions['*']['edit'] = false; // MediaWiki 1.5+ Settings

@@ -1,8 +1,18 @@
 <?php
-
-
 /**
  * AuthDrupal.php
+ *
+ * v 0.7.1 - 2010-03
+ * 
+ *   - fixed propagation of Drupal user roles to MW group membership
+ * 
+ * v 0.7 - 2010-03
+ *
+ *   - updated for Drupal 6.16 and Mediawiki 1.15.1
+ *   
+ *     Thanks to anarcat (Antoine Beaupré from koumbit.org) for code fixes
+ *     for Mediawiki 1.13+
+ *     This version will no longer work with MW 1.12 and before.
  *
  * v 0.6 - 2008-06
  *   - removed use of mcrypt/crypto.php and replaced with weaker home-grown
@@ -84,6 +94,8 @@ $wgExtensionCredits['parserhook'][] = array (
 );
 
 require_once ( 'AuthPlugin.php' );
+require_once('AuthDrupalEncode.php');
+	
 
 /**
  * Setup function--call this from LocalSettings.php
@@ -100,7 +112,11 @@ function SetupAuthDrupal() {
 
 	// If there is a Drupal cookie, install the user hook
 	if (! empty( $_COOKIE["DRXtrArgs"] )) {
-		$wgHooks['AutoAuthenticate'][] = 'Auth_drupal_autologin_hook'; /* Hook for magical authN */
+		// $wgHooks['AutoAuthenticate'][] = 'Auth_drupal_autologin_hook'; /* Hook for magical authN */
+		$wgHooks['UserLoadFromSession'][] = 'Auth_drupal_autologin_hook';
+
+		$wgHooks['UserLoadAfterLoadFromSession'][] = 'Auth_drupal_afteruserload_hook';
+
 
 		if ( $wgAuthDrupal_ReplaceLogin )
 			$wgHooks['PersonalUrls'][] = 'Auth_drupal_logoutlink_hook'; /* Disallow logout link */
@@ -110,53 +126,11 @@ function SetupAuthDrupal() {
 		// The cookie set by Drupal disappeared, so we should be logged out.
 
 		// if there are cookies from a previous session, try to get rid of em
-		StaticUserLogout();
+		authdrupal_StaticUserLogout();
 
 		if ( $wgAuthDrupal_ReplaceLogin )
 			$wgHooks['PersonalUrls'][] = 'Auth_drupal_loginlink_hook'; /* Hook to replace login link */
 	}
-}
-
-/**
- * StaticUserLogout
- *
- * This is redundant code since the Drupal user logout hook code does
- * all this. I haven't decided where I want it in the long run, so I'm
- * keeping it in both places for now.--Maarten.
- *
- * Can't call User object functions from SetupAuthDrupal() because User.php
- * has not been included at that point. Hence, this is the code from
- * User::logout(), commenting out code that depends on having an actual User
- * object
- *
- * XXX NOTE this code is replicated in Mediawiki.module so if you edit it here,
- * see if you need to fix it there too. (Should really be shared.)
- */
-
-function StaticUserLogout() {
-	// this lifted from wiki/includes/Setup.php which hasn't been included
-	// when we need these
-	if ( $GLOBALS['wgDBprefix'] ) {
-		$GLOBALS['wgCookiePrefix'] = $GLOBALS['wgDBname'] . '_' . $GLOBALS['wgDBprefix'];
-	}
-	elseif ( $GLOBALS['wgSharedDB'] ) {
-		// This is not supported yet--haven't researched it--Maarten.
-		// XXX should throw an error into watchdog log?
-		$GLOBALS['wgCookiePrefix'] = $GLOBALS['wgSharedDB'];
-	} else {
-		$GLOBALS['wgCookiePrefix'] = $GLOBALS['wgDBname'];
-	}
-
-	// $_SESSION['wsUserID'] = 0;  let's unset the cookie instead
-	setcookie( $GLOBALS['wgCookiePrefix'] . '_session', '', time() - 3600, $GLOBALS['wgCookiePath'], $GLOBALS['wgCookieDomain'], $GLOBALS['wgCookieSecure'] );
-
-	setcookie( $GLOBALS['wgCookiePrefix'] . 'UserName', '', time() - 3600, $GLOBALS['wgCookiePath'], $GLOBALS['wgCookieDomain'], $GLOBALS['wgCookieSecure'] );
-	setcookie( $GLOBALS['wgCookiePrefix'] . 'UserID', '', time() - 3600, $GLOBALS['wgCookiePath'], $GLOBALS['wgCookieDomain'], $GLOBALS['wgCookieSecure'] );
-	setcookie( $GLOBALS['wgCookiePrefix'] . 'Token', '', time() - 3600, $GLOBALS['wgCookiePath'], $GLOBALS['wgCookieDomain'], $GLOBALS['wgCookieSecure'] );
-
-	# Remember when user logged out, to prevent seeing cached pages
-	$ts_now = gmdate('YmdHis', time()); // emulates wfTimestampNow()
-	setcookie( $GLOBALS['wgCookiePrefix'] . 'LoggedOut', $ts_now, time() + 86400, $GLOBALS['wgCookiePath'], $GLOBALS['wgCookieDomain'], $GLOBALS['wgCookieSecure'] );
 }
 
 /**
@@ -168,35 +142,14 @@ function StaticUserLogout() {
  * the $return_user arg will normally be a reference to $wgUser
  * Not expected to return anything.
  */
-function Auth_drupal_autologin_hook(& $return_user ) {
+function Auth_drupal_autologin_hook($user, &$result ) {
 	global $wgUser;
 	global $wgAuth;
 	global $wgContLang;
 
-	//! dbg wfDebug("##" . __FUNCTION__ . "\n"); //!dbg XXX remove
+	//! dbg wfDebug("##" . __FUNCTION__ . "\n");
 
-	// Give us a user, see if we're around
-	$tmpuser = User::newFromSession();
-	// MJ: changed from $tmpuser->loadFromSession();
-	$rc = $tmpuser->load();
-
-	// If there's a prior session, check that it matches the current Drupal user
-	if ($rc && $tmpuser->isLoggedIn()) {
-		if ( $wgAuth->authenticate( $tmpuser->getName(), '' ) ) {
-			//!dbg wfDebug("AuthDrupal: User " . $tmpuser->getName() . " already logged in\n");
-
-			// update email, real name, etc.
-			$wgAuth->updateUser( $tmpuser );
-
-			return true;
-
-		} else {
-			// log out the existing user and continue below to start over
-			$tmpuser->logout();
-
-			// no return here--fall through to code below
-		}
-	}
+	wfSetupSession();
 
 	// Now lets check for drupal cookie
 	$name = getCurrentDrupalUsername();
@@ -204,6 +157,28 @@ function Auth_drupal_autologin_hook(& $return_user ) {
 	if ( empty( $name ) ) {
 		return false;
 	}
+
+/*** NEW CODE v0.7
+ * 
+ * Sketch for a rewrite based on newer Shibboleth Auth code
+ *
+	// see if that user exists in the wiki db
+	$wiki_name = User::getCanonicalName( $name );
+	$id = User::idFromName( $wiki_name );
+
+	if ( $id ) {
+	  // it's an existing user -- let mediawiki do the rest when the hook returns
+	  // (will call wgUser->loadFromId() to fetch user from DB) 
+	  $_SESSION['wsUserName'] = $wiki_name;
+	  $_SESSION['wsUserID'] = $id;
+	  return true;
+	} 
+	else {
+	  // new user to add
+	  // XXX YYY
+	  wfDebug("   NEED TO ADD NEW USER");
+	}
+***/
 
 	$user = User::newFromName( $name );
 
@@ -231,7 +206,7 @@ function Auth_drupal_autologin_hook(& $return_user ) {
 		// LoginForm::initUser() calls $wgAuth->initUser, but I don't see the point
 		// $wgAuth->initUser( $u );
 	} else {
-		//!dbg wfDebug( "AuthDrupal: logging in existing user " . $name . "\n" );
+		//wfDebug( "AuthDrupal: logging in existing user " . $name . "\n" );
 	}
 
 	// update email, real name, etc.
@@ -247,9 +222,43 @@ function Auth_drupal_autologin_hook(& $return_user ) {
 	$wgAuth->drupal_uid = $user->getID();
 	$wgAuth->logit( $message );
 
-	$return_user = $user;
+	// we do not set $result here because we want loadFromSession to go ahead
+	// and load the user object
 	return true;
 }
+
+/*
+ * anarcat: This code was stripped out because it was crashing MW,
+ *    not sure what it's for, everything works without it, as long as you login on the Drupal directly.
+ * 
+ * thinkling: this is an optimization to use an existing user esession if the user was previously logged in 
+ *    to the wiki. using this means you skip recreating cookies, etc and so will make for faster page loads. 
+ *
+ * belonged under the wfSetupSession() call.
+
+	// Give us a user, see if we're around
+	$tmpuser = User::newFromSession();
+	// MJ: changed from $tmpuser->loadFromSession();
+	$rc = $tmpuser->load();
+
+	// If there's a prior session, check that it matches the current Drupal user
+	if ($rc && $tmpuser->isLoggedIn()) {
+		if ( $wgAuth->authenticate( $tmpuser->getName(), '' ) ) {
+			//!dbg wfDebug("AuthDrupal: User " . $tmpuser->getName() . " already logged in\n");
+
+			// update email, real name, etc.
+			$wgAuth->updateUser( $tmpuser );
+
+			return true;
+
+		} else {
+			// log out the existing user and continue below to start over
+			$tmpuser->logout();
+
+			// no return here--fall through to code below
+		}
+	}
+*/
 
 /**
  * Hook function to rewrite login link to point to Drupal instance
@@ -304,6 +313,55 @@ function Auth_drupal_logoutlink_hook(& $personal_urls, & $title) {
 		'text' => wfMsg('userlogout' ),
 		'href' => $GLOBALS['wgAuthDrupal_LogoutURL'] );
 
+	return true;
+}
+
+/* 
+ * UserLoadAfterLoadFromSession hook
+ * 
+ * We transfer Drupal roles to MW group membership here by adding them to mGroups
+ * in the $wgUser object. Group membership does not get saved to the MW database.
+ * 
+ * MW 1.14+  
+ * 
+ */
+function Auth_drupal_afteruserload_hook( $user ) 
+{
+	global $wgAuthDrupal_PropagateRoles;
+	global $wgAuth;
+	
+	//!dbg 
+	wfDebug("## " . __FUNCTION__ . "\n");
+
+	if ( !empty( $wgAuthDrupal_PropagateRoles ) ) {
+		$user->load();
+		
+		$name = $user->getName();
+		$drupal_user = $wgAuth->getDrupalUser($name);
+	
+		if ( empty( $drupal_user ) ) {
+			wfDebug( __FUNCTION__ . " AuthDrupal ERROR: " . $name . " not found in Drupal DB \n" );
+			return true; // return error instead?
+		}	
+
+		// we load the user's Drupal roles into the MW groups array *transiently*.
+		// Using $user->AddGroup() would save them into the MW database, and then
+		// we'd have to worry about updating roles that have been removed.
+		$d_roles = $wgAuth->getDrupalUserRoles($drupal_user);
+		
+		// if requested, filter which roles are propagated
+		if ( !empty( $wgAuthDrupal_Roles ) ) {
+			$d_roles = array_intersect( $d_roles, $wgAuthDrupal_Roles );
+		}
+		$user->mGroups = array_merge($user->mGroups, $d_roles);
+	
+		$user->getEffectiveGroups(true); // force update
+		$user->mRights = null; // force rights update
+	
+		// wfDebug("## AuthDrupal Effective Groups after merge: " . var_export($user->getEffectiveGroups(true), true) . "\n");
+		// wfDebug("## AuthDrupal Effective Rights after merge: " . var_export($user->getRights(), true) . "\n");
+	}
+	
 	return true;
 }
 
@@ -558,33 +616,14 @@ class AuthDrupal extends AuthPlugin {
 	function updateUser(& $user) {
 		// wfDebug("##" . __METHOD__ . "\n"); //!dbg
 
+		$user->load();
+
 		$name = $user->getName();
 		$drupal_user = $this->getDrupalUser($name);
 
 		if ( empty( $drupal_user ) ) {
 			wfDebug( __FUNCTION__ . " AuthDrupal ERROR: " . $name . " not found in Drupal DB \n" );
 			return;
-		}
-
-		$user->load();
-
-		if ( !empty( $wgAuthDrupal_PropagateRoles ) ) {
-			// we load the user's Drupal roles into the MW groups array transiently.
-			// Using $user->AddGroup() would save them into the MW database, and then
-			// we'd have to worry about updating roles that have been removed.
-			$d_roles = $this->getDrupalUserRoles($drupal_user);
-			
-			// if requested, filter which roles are propagated
-			if ( !empty( $wgAuthDrupal_Roles ) ) {
-				$d_roles = array_intersect( $d_roles, $wgAuthDrupal_Roles );
-			}
-			$user->mGroups = array_merge($user->mGroups, $d_roles);
-
-			$user->getEffectiveGroups(true); // force update
-			$user->mRights = null; // force rights update
-
-			// wfDebug("## AuthDrupal Effective Groups after merge: " . array_to_str($user->getEffectiveGroups(true)) . "\n");
-			// wfDebug("## AuthDrupal Effective Rights after merge: " . array_to_str($user->getRights()) . "\n");
 		}
 
 		/* XXX replication of Drupal passwords in MW database disabled for now;
@@ -835,8 +874,6 @@ function auth_drupal_db_error_callback($db_obj, $error) {
  * 
  */
 function getCurrentDrupalUsername() {
-    require_once('AuthDrupalEncode.php');
-	
     $plaintext_name = $_COOKIE["DRXtrArgs"];
 	$encoded_name = $_COOKIE["DRXtrArgs2"];
 	

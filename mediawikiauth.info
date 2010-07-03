@@ -1,5 +1,5 @@
 ; $Id: $
-name = AuthDrupal
+name = Mediawiki auth bridge
 description = Provides Drupal to Mediawiki login integration.
-package = mediawiki
-version = 0.6
+package = Mediawiki
+core = 6.x

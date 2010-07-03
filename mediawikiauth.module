@@ -2,6 +2,8 @@
 // Written by Mitch Schwenk <tazzytazzy at yahoo (.) com
 // Updates by Maarten van Dantzich mediawiki.org User:Thinkling
 //
+//  v 0.7 - 2010-03 adopted Drupal side module renaming to match version 
+//    on drupal.org maintained by anarcat.
 //  v 0.6 - 2008-06
 //    removed hook_perms as it wasn't relevant
 //    replaced mcrypt with less secure but more portable approach to 
@@ -65,57 +67,26 @@ $GLOBALS['wgAuthDrupal_wiki_settings'] = array (
  *
  *----------------------------------------------------------------------*/
 
-/* set wgCookiePrefix from the values of wgDBprefix and wgDBname
- * $vals is an array of per-wiki settings, i.e. one of the elements of
- *   $GLOBALS['wgAuthDrupal_wiki_settings'
- */
-
-foreach( $GLOBALS['wgAuthDrupal_wiki_settings'] as $key => $vals) {
-
-	if ( $vals['wgDBprefix'] ) {
-		$GLOBALS['wgAuthDrupal_wiki_settings'][$key]['wgCookiePrefix'] =
-			$vals['wgDBname'] . '_' . $vals['wgDBprefix'];
-	}
-	elseif ( $vals['wgSharedDB'] ) {
-		// This is not supported yet--haven't researched it--Maarten.
-		// XXX should throw an error into watchdog log?
-		$GLOBALS['wgAuthDrupal_wiki_settings'][$key]['wgCookiePrefix'] =
-			$vals['wgSharedDB'];
-	}
-	else {
-		$GLOBALS['wgAuthDrupal_wiki_settings'][$key]['wgCookiePrefix'] =
-			$vals['wgDBname'];
-	}
-}
-
-// this lifted from wiki/include/DefaultSettings.php
-$proto = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] == 'on') ? 'https' : 'http';
-$GLOBALS['wgCookieSecure'] = ($proto == 'https');
+require_once('AuthDrupalEncode.php');
 
 
 
-// XXX This is virtually the same code as StaticUserLogout in AuthDrupal.php
-// XXX and should probably move into a utility include file and be shared
-function mediawiki_StaticUserLogout() {
+function mediawikiauth_StaticUserLogout() {
+
+	 // this lifted from wiki/include/DefaultSettings.php
+	 $proto = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] == 'on') ? 'https' : 'http';
+	 $cookie_secure = ($proto == 'https');
 
 	foreach( $GLOBALS['wgAuthDrupal_wiki_settings'] as $vals)
 	{
 		// delete the user's identifying cookies
-		setcookie( $vals['wgCookiePrefix'].'_session', '', time() - 3600, $vals['wgCookiePath'], $vals['wgCookieDomain'], $GLOBALS['wgCookieSecure'] );
-		setcookie( $vals['wgCookiePrefix'].'UserName', '', time() - 3600, $vals['wgCookiePath'], $vals['wgCookieDomain'], $GLOBALS['wgCookieSecure'] );
-		setcookie( $vals['wgCookiePrefix'].'UserID',   '', time() - 3600, $vals['wgCookiePath'], $vals['wgCookieDomain'], $GLOBALS['wgCookieSecure'] );
-		setcookie( $vals['wgCookiePrefix'].'Token',    '', time() - 3600, $vals['wgCookiePath'], $vals['wgCookieDomain'], $GLOBALS['wgCookieSecure'] );
-
-		// Remember when the user logged out, to prevent seeing cached pages
-		$ts_now = gmdate( 'YmdHis', time() ); // emulates wfTimestampNow()
-		setcookie( $vals['wgCookiePrefix'].'LoggedOut', $ts_now, time() + 86400, $vals['wgCookiePath'], $vals['wgCookieDomain'], $GLOBALS['wgCookieSecure'] );
+		authdrupal_StaticUserLogout($vals['wgDBname'], $vals['wgDBprefix'], $vals['wgCookiePath'], $vals['wgCookieDomain'], $cookie_secure );
 	}
 }
 
 
 
-function mediawiki_user($op, &$edit, &$user, $category = NULL) {
-  require_once('AuthDrupalEncode.php');
+function mediawikiauth_user($op, &$edit, &$user, $category = NULL) {
 	 
   switch ($op) {
     case 'login':
@@ -139,7 +110,7 @@ function mediawiki_user($op, &$edit, &$user, $category = NULL) {
 			setcookie("DRXtrArgs", "", time() - 3600, $vals['wgCookiePath'], $vals['wgCookieDomain']);
 			setcookie("DRXtrArgs2", "", time() - 3600, $vals['wgCookiePath'], $vals['wgCookieDomain']);
 		}
-		mediawiki_StaticUserLogout();
+		mediawikiauth_StaticUserLogout();
       break;
 
   }

@@ -1,7 +1,7 @@
 <?php
 
 /*
- * AuthDrupalEncode.php 0.6, 2008-06
+ * AuthDrupalEncode.php
  * 
  * This produces an obfuscated string that is meant to be hard to spoof and
  * thus verifies that the login is legitimate.
@@ -35,4 +35,50 @@ function authdrupal_encode($plain_string)
 	return md5( implode( '', $a ) );
 }
 
-?>
+/**
+ * StaticUserLogout
+ *
+ * Can't call User object functions from SetupAuthDrupal() because User.php
+ * has not been included at that point. Hence, this is the code from
+ * User::logout(), commenting out code that depends on having an actual User
+ * object
+ */
+
+function authdrupal_StaticUserLogout($dbname = null, $dbprefix = null, $path = null, $domain = null, $cookie_secure = null) 
+{
+	if (is_null($dbname)) {
+	    $prefix = $GLOBALS['wgDBname'];
+	}
+	if (is_null($dbprefix)) {
+		$prefix = $GLOBALS['wgDBPrefix'];
+	}
+	if (is_null($path)) {
+		$path = $GLOBALS['wgCookiePath'];
+	}
+	if (is_null($domain)) {
+		$domain = $GLOBALS['wgCookieDomain'];
+	}
+	if (is_null($cookie_secure)) {
+	    $cookie_secure = $GLOBALS['wgCookieSecure'];
+	}
+
+	// this lifted from wiki/includes/Setup.php which hasn't been included
+	// when we need these
+	if ( ! empty($dbprefix) ) {
+		$prefix = $dbname . '_' . $dbprefix;
+	} else {
+		$prefix = $dbname;
+	}
+
+        $GLOBALS['wgCookiePrefix'] = $prefix; // not sure this is necessary
+
+	setcookie( $prefix . '_session', '', time() - 3600, $path, $domain, $cookie_secure );
+
+	setcookie( $prefix . 'UserName', '', time() - 3600, $path, $domain, $cookie_secure );
+	setcookie( $prefix . 'UserID',   '', time() - 3600, $path, $domain, $cookie_secure );
+	setcookie( $prefix . 'Token',    '', time() - 3600, $path, $domain, $cookie_secure );
+
+	// Remember when the user logged out, to prevent seeing cached pages
+	$ts_now = gmdate('YmdHis', time()); // emulates wfTimestampNow()
+	setcookie( $prefix . 'LoggedOut', $ts_now, time() + 86400, $path, $domain, $cookie_secure );
+}
