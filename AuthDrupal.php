@@ -2,8 +2,11 @@
 /**
  * AuthDrupal.php
  *
+ * v 0.7.2 - 2010-12
+ *   - fixed handling of usernames with underscores in them
+ *   - fixed two typo bugs
+ *
  * v 0.7.1 - 2010-03
- * 
  *   - fixed propagation of Drupal user roles to MW group membership
  * 
  * v 0.7 - 2010-03
@@ -196,7 +199,7 @@ function Auth_drupal_autologin_hook($user, &$result ) {
 
 		// this mimicks what LoginForm::initUser() does (code identical to
 		// regular login moved down to common code)
-		$user->setName( $wgContLang->ucfirst( $drupal_user->name ) );
+		$user->setName( str_replace( '_', ' ', $wgContLang->ucfirst( $drupal_user->name ) ) );
 		$user->addToDatabase();
 
 		// Update user count in site stats (stolen from SpecialUserlogin)
@@ -779,7 +782,7 @@ class AuthDrupal extends AuthPlugin {
 		//!dbg wfDebug("##" . __METHOD__ . "\n");
 
 		global $wgContLang;
-		return $wgContLang->ucfirst($username);
+		return $wgContLang->ucfirst( $username );
 	}
 
 	function makeDrupalTableName($table) {
@@ -862,7 +865,7 @@ class AuthDrupal extends AuthPlugin {
  * Database error callback function
  */
 function auth_drupal_db_error_callback($db_obj, $error) {
-	wgDebug( __FUNC__ . " - ERROR: " . $error . "\n" );
+	wfDebug( __FUNC__ . " - ERROR: " . $error . "\n" );
 }
 
 /**

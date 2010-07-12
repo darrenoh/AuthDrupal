@@ -50,7 +50,7 @@ function authdrupal_StaticUserLogout($dbname = null, $dbprefix = null, $path = n
 	    $prefix = $GLOBALS['wgDBname'];
 	}
 	if (is_null($dbprefix)) {
-		$prefix = $GLOBALS['wgDBPrefix'];
+		$prefix = $GLOBALS['wgDBprefix'];
 	}
 	if (is_null($path)) {
 		$path = $GLOBALS['wgCookiePath'];
