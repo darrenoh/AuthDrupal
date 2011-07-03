@@ -96,7 +96,7 @@ $wgExtensionCredits['parserhook'][] = array (
 	'url' => 'http://www.mediawiki.org/wiki/AuthDrupal',
 );
 
-require_once ( 'AuthPlugin.php' );
+require_once ( 'includes/AuthPlugin.php' );
 require_once('AuthDrupalEncode.php');
 	
 
